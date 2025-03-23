@@ -1,0 +1,13 @@
+version: '3'
+
+services:
+  web:
+    build: .
+    container_name: brain-mri-detection
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./app:/app/app
+      - ./app/static/models:/app/app/static/models
+      - ./app/static/img/uploads:/app/app/static/img/uploads
+    restart: unless-stopped 
