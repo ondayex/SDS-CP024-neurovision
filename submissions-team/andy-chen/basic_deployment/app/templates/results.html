@@ -1,0 +1,134 @@
+{% extends "base.html" %}
+
+{% block head %}
+<style>
+    .results-container canvas {
+        max-width: 100%;
+        height: auto;
+        display: block;
+        margin: 0 auto;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="results-container">
+    <div class="result-header">
+        <h2>Detection Results</h2>
+        <p>Model: {{ results.model_info.name }}</p>
+    </div>
+
+    {% if results.error %}
+    <div class="error-message">
+        <p>Error: {{ results.error }}</p>
+    </div>
+    {% elif results.message %}
+    <div class="info-message">
+        <p>{{ results.message }}</p>
+    </div>
+    {% else %}
+    <div class="results-grid">
+        <div class="image-container">
+            <h3>Detection Result</h3>
+            <div class="canvas-container">
+                <canvas id="detection-canvas"></canvas>
+            </div>
+        </div>
+        
+        <div class="detection-info">
+            <h3>Detection Details</h3>
+            {% if results.detections and results.detections|length > 0 %}
+                <div class="detections-list">
+                    {% for detection in results.detections %}
+                    <div class="detection-item">
+                        <h4>{{ detection.class_name }}</h4>
+                        <div class="detection-stats">
+                            <div class="stat">
+                                <span class="stat-label">Detection Confidence:</span>
+                                <div class="progress-bar">
+                                    <div class="progress" style="width: {{ detection.confidence * 100 }}%"></div>
+                                </div>
+                                <span class="stat-value">{{ "%.2f"|format(detection.confidence * 100) }}%</span>
+                            </div>
+                            <div class="stat">
+                                <span class="stat-label">Class Probability:</span>
+                                <div class="progress-bar">
+                                    <div class="progress" style="width: {{ detection.class_probability * 100 }}%"></div>
+                                </div>
+                                <span class="stat-value">{{ "%.2f"|format(detection.class_probability * 100) }}%</span>
+                            </div>
+                            <div class="stat">
+                                <span class="stat-label">Bounding Box:</span>
+                                <span class="stat-value">[{{ detection.bbox|join(', ') }}]</span>
+                            </div>
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+            {% else %}
+                <p class="no-detections">No tumors detected in the image.</p>
+            {% endif %}
+        </div>
+    </div>
+    
+    <div class="model-description">
+        <h3>About the Model</h3>
+        <p>{{ results.model_info.description }}</p>
+    </div>
+    {% endif %}
+    
+    <div class="action-buttons">
+        <a href="/" class="back-btn">Analyze Another Image</a>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        {% if not results.error and not results.message %}
+        const canvas = document.getElementById('detection-canvas');
+        const ctx = canvas.getContext('2d');
+        
+        // Load the image
+        const img = new Image();
+        img.src = "{{ results.image_path }}";
+        
+        img.onload = function() {
+            // Set canvas dimensions to match image
+            canvas.width = img.width;
+            canvas.height = img.height;
+            
+            // Draw the image on the canvas
+            ctx.drawImage(img, 0, 0);
+            
+            // Draw bounding boxes
+            {% if results.detections and results.detections|length > 0 %}
+            ctx.lineWidth = 3;
+            ctx.strokeStyle = 'rgba(255, 0, 0, 0.8)';
+            ctx.fillStyle = 'rgba(255, 0, 0, 0.3)';
+            
+            {% for detection in results.detections %}
+            // Draw bounding box
+            const bbox = {{ detection.bbox }};
+            const [x1, y1, x2, y2] = bbox;
+            const width = x2 - x1;
+            const height = y2 - y1;
+            
+            ctx.strokeRect(x1, y1, width, height);
+            ctx.fillRect(x1, y1, width, height);
+            
+            // Draw label
+            ctx.font = 'bold 16px Arial';
+            ctx.fillStyle = 'rgba(255, 255, 255, 0.8)';
+            ctx.fillRect(x1, y1 - 20, 120, 20);
+            
+            ctx.fillStyle = 'rgba(255, 0, 0, 1)';
+            ctx.fillText("{{ detection.class_name }}", x1 + 5, y1 - 5);
+            {% endfor %}
+            {% endif %}
+        };
+        {% endif %}
+    });
+</script>
+{% endblock %} 

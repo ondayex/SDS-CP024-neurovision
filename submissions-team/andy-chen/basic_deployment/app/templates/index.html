@@ -1,0 +1,119 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="app-container">
+    <div class="intro-section">
+        <h2>Brain MRI Tumor Detection</h2>
+        <p>Upload a brain MRI scan to detect potential tumors using state-of-the-art machine learning models.</p>
+    </div>
+
+    <div class="upload-section">
+        <form id="upload-form" action="/detect" method="post" enctype="multipart/form-data">
+            <div class="form-group">
+                <label for="file-upload" class="file-upload-label">
+                    <div class="upload-icon">
+                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                            <polyline points="17 8 12 3 7 8"></polyline>
+                            <line x1="12" y1="3" x2="12" y2="15"></line>
+                        </svg>
+                    </div>
+                    <span>Click or drag to upload MRI scan</span>
+                </label>
+                <input type="file" id="file-upload" name="file" accept="image/*" required>
+                <div id="file-name" class="file-name"></div>
+                <div class="preview-container">
+                    <img id="image-preview" src="#" alt="Preview" style="display: none;">
+                </div>
+            </div>
+
+            <div class="form-group">
+                <label for="model-select">Select Model:</label>
+                <div class="model-selection">
+                    {% for model_id, model_info in models.items() %}
+                    <div class="model-option">
+                        <input type="radio" id="model-{{ model_id }}" name="model_type" value="{{ model_id }}" {% if model_id == 'yolo' %}checked{% endif %} required>
+                        <label for="model-{{ model_id }}">
+                            <h3>{{ model_info.name }}</h3>
+                            <p>{{ model_info.description }}</p>
+                        </label>
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+
+            <div class="form-group">
+                <button type="submit" class="submit-btn">Detect Tumor</button>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        const fileUpload = document.getElementById('file-upload');
+        const fileName = document.getElementById('file-name');
+        const imagePreview = document.getElementById('image-preview');
+        
+        fileUpload.addEventListener('change', function(e) {
+            if (this.files && this.files[0]) {
+                fileName.textContent = this.files[0].name;
+                
+                // Image preview
+                const reader = new FileReader();
+                reader.onload = function(e) {
+                    imagePreview.src = e.target.result;
+                    imagePreview.style.display = 'block';
+                }
+                reader.readAsDataURL(this.files[0]);
+            }
+        });
+        
+        // Drag and drop functionality
+        const uploadLabel = document.querySelector('.file-upload-label');
+        
+        ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
+            uploadLabel.addEventListener(eventName, preventDefaults, false);
+        });
+        
+        function preventDefaults(e) {
+            e.preventDefault();
+            e.stopPropagation();
+        }
+        
+        ['dragenter', 'dragover'].forEach(eventName => {
+            uploadLabel.addEventListener(eventName, highlight, false);
+        });
+        
+        ['dragleave', 'drop'].forEach(eventName => {
+            uploadLabel.addEventListener(eventName, unhighlight, false);
+        });
+        
+        function highlight() {
+            uploadLabel.classList.add('highlight');
+        }
+        
+        function unhighlight() {
+            uploadLabel.classList.remove('highlight');
+        }
+        
+        uploadLabel.addEventListener('drop', handleDrop, false);
+        
+        function handleDrop(e) {
+            const dt = e.dataTransfer;
+            const files = dt.files;
+            
+            if (files && files[0]) {
+                fileUpload.files = files;
+                fileName.textContent = files[0].name;
+                
+                // Trigger change event to update preview
+                const event = new Event('change');
+                fileUpload.dispatchEvent(event);
+            }
+        }
+    });
+</script>
+{% endblock %} 
