@@ -12,123 +12,160 @@
 {% endblock %}
 
 {% block content %}
-<div class="results-container">
-    <div class="result-header">
-        <h2>Detection Results</h2>
-        <p>Model: {{ results.model_info.name }}</p>
-    </div>
-
-    {% if results.error %}
-    <div class="error-message">
-        <p>Error: {{ results.error }}</p>
-    </div>
-    {% elif results.message %}
-    <div class="info-message">
-        <p>{{ results.message }}</p>
-    </div>
-    {% else %}
-    <div class="results-grid">
-        <div class="image-container">
-            <h3>Detection Result</h3>
-            <div class="canvas-container">
-                <canvas id="detection-canvas"></canvas>
-            </div>
-        </div>
-        
-        <div class="detection-info">
-            <h3>Detection Details</h3>
-            {% if results.detections and results.detections|length > 0 %}
-                <div class="detections-list">
-                    {% for detection in results.detections %}
-                    <div class="detection-item">
-                        <h4>{{ detection.class_name }}</h4>
-                        <div class="detection-stats">
-                            <div class="stat">
-                                <span class="stat-label">Detection Confidence:</span>
-                                <div class="progress-bar">
-                                    <div class="progress" style="width: {{ detection.confidence * 100 }}%"></div>
-                                </div>
-                                <span class="stat-value">{{ "%.2f"|format(detection.confidence * 100) }}%</span>
+<div class="container mt-4">
+    <div class="row justify-content-center">
+        <div class="col-lg-10">
+            <div class="card shadow-lg">
+                <div class="card-header">
+                    <h3 class="text-center mb-0">Detection Results</h3>
+                </div>
+                <div class="card-body p-4">
+                    <div class="row">
+                        <!-- Detection Image -->
+                        <div class="col-md-8">
+                            <div class="detection-container rounded-3 overflow-hidden">
+                                <canvas id="detection-canvas" style="max-height: 70vh; width: 100%; object-fit: contain;"></canvas>
                             </div>
-                            <div class="stat">
-                                <span class="stat-label">Class Probability:</span>
-                                <div class="progress-bar">
-                                    <div class="progress" style="width: {{ detection.class_probability * 100 }}%"></div>
-                                </div>
-                                <span class="stat-value">{{ "%.2f"|format(detection.class_probability * 100) }}%</span>
+                        </div>
+                        
+                        <!-- Results Info -->
+                        <div class="col-md-4">
+                            <div class="results-info">
+                                {% if results.detections %}
+                                    {% for detection in results.detections %}
+                                        <div class="alert alert-success d-flex align-items-center border-0 shadow-sm mb-3">
+                                            <div class="result-icon me-3">
+                                                <i class="fas fa-check-circle"></i>
+                                            </div>
+                                            <div>
+                                                <h6 class="mb-1">Tumor Detected</h6>
+                                                <div class="d-flex align-items-center">
+                                                    <div class="confidence-bar me-2" style="width: {{ detection.confidence }}%"></div>
+                                                    <small>{{ "%.2f"|format(detection.confidence) }}%</small>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    {% endfor %}
+                                {% else %}
+                                    <div class="alert alert-warning d-flex align-items-center border-0 shadow-sm">
+                                        <div class="result-icon me-3">
+                                            <i class="fas fa-exclamation-triangle"></i>
+                                        </div>
+                                        <div>
+                                            <h6 class="mb-1">No Tumors Detected</h6>
+                                            <small class="text-muted">No tumors found in this image.</small>
+                                        </div>
+                                    </div>
+                                {% endif %}
                             </div>
-                            <div class="stat">
-                                <span class="stat-label">Bounding Box:</span>
-                                <span class="stat-value">[{{ detection.bbox|join(', ') }}]</span>
+                            
+                            <div class="mt-4">
+                                <a href="/" class="btn btn-primary w-100">
+                                    <i class="fas fa-upload me-2"></i>Analyze Another Image
+                                </a>
                             </div>
                         </div>
                     </div>
-                    {% endfor %}
                 </div>
-            {% else %}
-                <p class="no-detections">No tumors detected in the image.</p>
-            {% endif %}
+            </div>
         </div>
     </div>
-    
-    <div class="model-description">
-        <h3>About the Model</h3>
-        <p>{{ results.model_info.description }}</p>
-    </div>
-    {% endif %}
-    
-    <div class="action-buttons">
-        <a href="/" class="back-btn">Analyze Another Image</a>
-    </div>
 </div>
-{% endblock %}
 
-{% block scripts %}
+<style>
+.detection-container {
+    background-color: #f8f9ff;
+    padding: 0.5rem;
+    box-shadow: inset 0 2px 4px rgba(0,0,0,0.06);
+}
+
+.result-icon {
+    width: 32px;
+    height: 32px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 50%;
+    background-color: rgba(255,255,255,0.2);
+}
+
+.confidence-bar {
+    height: 4px;
+    background: linear-gradient(to right, var(--primary-color), var(--secondary-color));
+    border-radius: 2px;
+    transition: width 1s ease-in-out;
+}
+
+.alert {
+    padding: 0.75rem;
+}
+
+.alert-success {
+    background: linear-gradient(135deg, #10b981, #059669);
+    color: white;
+}
+
+.alert-warning {
+    background: linear-gradient(135deg, #f59e0b, #d97706);
+    color: white;
+}
+</style>
+
 <script>
-    document.addEventListener('DOMContentLoaded', function() {
-        {% if not results.error and not results.message %}
+document.addEventListener('DOMContentLoaded', function() {
+    const img = new Image();
+    img.src = "{{ url_for('static', path=image_path) }}";
+    
+    img.onload = function() {
         const canvas = document.getElementById('detection-canvas');
         const ctx = canvas.getContext('2d');
         
-        // Load the image
-        const img = new Image();
-        img.src = "{{ results.image_path }}";
+        // Calculate aspect ratio
+        const containerWidth = canvas.parentElement.offsetWidth;
+        const containerHeight = window.innerHeight * 0.7; // 70vh
+        const imageAspectRatio = img.naturalWidth / img.naturalHeight;
+        const containerAspectRatio = containerWidth / containerHeight;
         
-        img.onload = function() {
-            // Set canvas dimensions to match image
-            canvas.width = img.width;
-            canvas.height = img.height;
+        let width, height;
+        if (imageAspectRatio > containerAspectRatio) {
+            width = containerWidth;
+            height = containerWidth / imageAspectRatio;
+        } else {
+            height = containerHeight;
+            width = containerHeight * imageAspectRatio;
+        }
+        
+        canvas.width = width;
+        canvas.height = height;
+        
+        ctx.drawImage(img, 0, 0, width, height);
+        
+        // Scale factor for bounding boxes
+        const scaleX = width / img.naturalWidth;
+        const scaleY = height / img.naturalHeight;
+        
+        ctx.lineWidth = 3;
+        ctx.strokeStyle = '#0d47a1';
+        ctx.fillStyle = 'rgba(13, 71, 161, 0.2)';
+        
+        {% for detection in results.detections %}
+            const [x1, y1, x2, y2] = {{ detection.bbox }};
+            const boxWidth = (x2 - x1) * scaleX;
+            const boxHeight = (y2 - y1) * scaleY;
             
-            // Draw the image on the canvas
-            ctx.drawImage(img, 0, 0);
-            
-            // Draw bounding boxes
-            {% if results.detections and results.detections|length > 0 %}
-            ctx.lineWidth = 3;
-            ctx.strokeStyle = 'rgba(255, 0, 0, 0.8)';
-            ctx.fillStyle = 'rgba(255, 0, 0, 0.3)';
-            
-            {% for detection in results.detections %}
             // Draw bounding box
-            const bbox = {{ detection.bbox }};
-            const [x1, y1, x2, y2] = bbox;
-            const width = x2 - x1;
-            const height = y2 - y1;
-            
-            ctx.strokeRect(x1, y1, width, height);
-            ctx.fillRect(x1, y1, width, height);
+            ctx.strokeRect(x1 * scaleX, y1 * scaleY, boxWidth, boxHeight);
+            ctx.fillRect(x1 * scaleX, y1 * scaleY, boxWidth, boxHeight);
             
             // Draw label
-            ctx.font = 'bold 16px Arial';
-            ctx.fillStyle = 'rgba(255, 255, 255, 0.8)';
-            ctx.fillRect(x1, y1 - 20, 120, 20);
+            ctx.font = 'bold 14px Inter';
+            ctx.fillStyle = 'rgba(255, 255, 255, 0.9)';
+            ctx.fillRect(x1 * scaleX, y1 * scaleY - 24, 120, 24);
             
-            ctx.fillStyle = 'rgba(255, 0, 0, 1)';
-            ctx.fillText("{{ detection.class_name }}", x1 + 5, y1 - 5);
-            {% endfor %}
-            {% endif %}
-        };
-        {% endif %}
-    });
+            ctx.fillStyle = '#0d47a1';
+            ctx.fillText(`Tumor: {{ "%.1f"|format(detection.confidence) }}%`, x1 * scaleX + 5, y1 * scaleY - 6);
+        {% endfor %}
+    };
+});
 </script>
 {% endblock %} 
