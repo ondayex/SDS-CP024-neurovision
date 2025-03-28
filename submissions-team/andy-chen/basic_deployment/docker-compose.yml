@@ -1,5 +1,3 @@
-version: '3'
-
 services:
   web:
     build: .
@@ -7,7 +5,8 @@ services:
     ports:
       - "8000:8000"
     volumes:
-      - ./app:/app/app
+      - ./app/static/uploads:/app/app/static/uploads
       - ./app/static/models:/app/app/static/models
-      - ./app/static/img/uploads:/app/app/static/img/uploads
-    restart: unless-stopped 
+    restart: unless-stopped
+    environment:
+      - PYTHONUNBUFFERED=1 

@@ -34,7 +34,7 @@ models = {
 }
 
 # Ensure the uploads directory exists
-os.makedirs("app/static/img/uploads", exist_ok=True)
+os.makedirs("app/static/uploads", exist_ok=True)
 os.makedirs("app/static/models", exist_ok=True)
 
 
@@ -46,43 +46,49 @@ async def home(request: Request):
 
 
 @app.post("/detect")
-async def detect_tumor(
-    request: Request, file: UploadFile = File(...), model_type: str = Form(...)
-):
-    # Save uploaded file
-    file_extension = os.path.splitext(file.filename)[1]
-    unique_filename = f"{uuid.uuid4()}{file_extension}"
-    file_path = f"app/static/img/uploads/{unique_filename}"
+async def detect_tumor(request: Request):
+    try:
+        form = await request.form()
+        file = form.get("file")
 
-    with open(file_path, "wb") as buffer:
-        shutil.copyfileobj(file.file, buffer)
+        if not file:
+            return templates.TemplateResponse(
+                "index.html", {"request": request, "error": "No file uploaded"}
+            )
 
-    # Process image with selected model
-    if model_type == "yolo":
-        results = process_with_yolo(file_path)
-    elif model_type == "vgg16":
-        # This will be implemented later
-        results = {"message": "VGG-16 model not yet implemented"}
-    else:
-        results = {"error": "Invalid model selected"}
+        # Generate unique filename
+        file_extension = os.path.splitext(file.filename)[1]
+        unique_filename = f"{uuid.uuid4()}{file_extension}"
+        file_path = f"uploads/{unique_filename}"
 
-    # Add the image path to the results
-    results["image_path"] = f"/static/img/uploads/{unique_filename}"
-    results["model_info"] = models[model_type]
+        # Save uploaded file
+        with open(f"app/static/{file_path}", "wb") as buffer:
+            content = await file.read()
+            buffer.write(content)
 
-    return templates.TemplateResponse(
-        "results.html", {"request": request, "results": results}
-    )
+        # Process image with YOLO
+        results = process_with_yolo(f"app/static/{file_path}")
+
+        # If there's an error in processing, return it
+        if "error" in results:
+            return templates.TemplateResponse(
+                "index.html", {"request": request, "error": results["error"]}
+            )
+
+        # Return results template with both image path and results
+        return templates.TemplateResponse(
+            "results.html",
+            {"request": request, "image_path": file_path, "results": results},
+        )
+
+    except Exception as e:
+        return templates.TemplateResponse(
+            "index.html",
+            {"request": request, "error": f"Error processing image: {str(e)}"},
+        )
 
 
 def process_with_yolo(image_path):
-    # Check if the model exists
-    model_path = models["yolo"]["path"]
-    if not os.path.exists(model_path):
-        return {
-            "message": "YOLO model file not found. Please add the model file to app/static/models/best.onnx. This is a simulation mode for now."
-        }
-
     try:
         # Load and preprocess image
         img = cv2.imread(image_path)
@@ -90,69 +96,71 @@ def process_with_yolo(image_path):
             return {"error": "Failed to load image"}
 
         original_height, original_width = img.shape[:2]
-
-        # Resize and normalize image for YOLO (assuming 640x640 input)
         input_size = 640
+
+        # Resize image
         img_resized = cv2.resize(img, (input_size, input_size))
+
+        # Convert to RGB and normalize
         img_rgb = cv2.cvtColor(img_resized, cv2.COLOR_BGR2RGB)
-
-        # Normalize to 0-1
         img_normalized = img_rgb.astype(np.float32) / 255.0
-        # Expand dimensions to create batch size of 1 [batch_size, height, width, channels]
-        blob = np.expand_dims(img_normalized, axis=0).transpose(0, 3, 1, 2)
 
-        # Run inference with ONNX Runtime
-        session = ort.InferenceSession(model_path)
+        # Prepare input tensor
+        input_tensor = np.expand_dims(img_normalized, axis=0).transpose(0, 3, 1, 2)
+
+        # Run inference
+        session = ort.InferenceSession(
+            models["yolo"]["path"], providers=["CPUExecutionProvider"]
+        )
+
         input_name = session.get_inputs()[0].name
         output_names = [output.name for output in session.get_outputs()]
-        outputs = session.run(output_names, {input_name: blob})
-
-        # Process output (assuming YOLOv8 format)
-        # For YOLOv8, output shape is typically [batch, num_detections, 85]
-        # where 85 = 4 (bbox) + 1 (confidence) + 80 (class scores for COCO)
-        # For brain tumor detection, we might have fewer classes
-
-        # Extract boxes and scores
-        detections = outputs[0]  # Assuming first output contains detections
-
-        # Initialize the results list
-        results = {"detections": []}
+        outputs = session.run(output_names, {input_name: input_tensor})
 
         # Process detections
-        for detection in detections[0]:  # Process first image in batch
-            confidence = float(detection[4])  # Detection confidence
+        results = {"detections": []}
+        predictions = outputs[0]
 
-            # Only consider detections with confidence above threshold
-            if confidence > 0.25:  # Adjustable threshold
-                # Get bounding box coordinates (YOLO format)
-                x, y, w, h = detection[:4]
+        # Find the detection with highest confidence
+        best_detection = None
+        max_confidence = 0
 
-                # Convert to original image coordinates
-                x_factor = original_width / input_size
-                y_factor = original_height / input_size
+        for pred in predictions[0]:
+            confidence = float(pred[4])
+            if (
+                confidence > 0.25 and confidence > max_confidence
+            ):  # Confidence threshold
+                max_confidence = confidence
+                best_detection = pred
 
-                x1 = int((x - w / 2) * x_factor)
-                y1 = int((y - h / 2) * y_factor)
-                x2 = int((x + w / 2) * x_factor)
-                y2 = int((y + h / 2) * y_factor)
+        # If we found a valid detection, process it
+        if best_detection is not None:
+            x, y, w, h = best_detection[:4]
+            confidence = max_confidence
 
-                # Get class probabilities (assuming one class for brain tumor)
-                class_prob = float(detection[5])  # Probability of first class
+            # Convert to image coordinates
+            x_factor = original_width / input_size
+            y_factor = original_height / input_size
 
-                # Add detection to results
-                results["detections"].append(
-                    {
-                        "bbox": [x1, y1, x2, y2],
-                        "confidence": confidence,
-                        "class_probability": class_prob,
-                        "class_name": "Tumor",  # Assuming class name
-                    }
-                )
+            x1 = max(0, int((x - w / 2) * x_factor))
+            y1 = max(0, int((y - h / 2) * y_factor))
+            x2 = min(original_width, int((x + w / 2) * x_factor))
+            y2 = min(original_height, int((y + h / 2) * y_factor))
+
+            results["detections"].append(
+                {
+                    "bbox": [x1, y1, x2, y2],
+                    "confidence": min(
+                        confidence * 100, 100
+                    ),  # Convert to percentage and cap at 100%
+                    "class_name": "Tumor",
+                }
+            )
 
         return results
 
     except Exception as e:
-        return {"error": f"Error during processing: {str(e)}"}
+        return {"error": f"Error processing image: {str(e)}"}
 
 
 if __name__ == "__main__":
