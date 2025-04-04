@@ -2,9 +2,12 @@
 .ipynb_checkpoints
 .DS_Store
 .env
+.datasets/
 
 # virtual environments
 venv/
 .venv/
 env/
 ENV/
+SDS_neurovision_env/
+neurovision_yolov12_env/

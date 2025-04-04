@@ -1,0 +1,12 @@
+services:
+  web:
+    build: .
+    container_name: brain-mri-detection
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./app/static/uploads:/app/app/static/uploads
+      - ./app/static/models:/app/app/static/models
+    restart: unless-stopped
+    environment:
+      - PYTHONUNBUFFERED=1 
